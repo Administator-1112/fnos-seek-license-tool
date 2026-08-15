@@ -1,0 +1,73 @@
+#!/bin/bash
+
+LOG_FILE="${TRIM_PKGVAR}/info.log"
+PID_FILE="${TRIM_PKGVAR}/app.pid"
+SOCK_FILE="${TRIM_APPDEST}/app.sock"
+
+log_msg() {
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> ${LOG_FILE}
+}
+
+start_process() {
+    if status_process; then
+        return 0
+    fi
+
+    log_msg "Starting web service ..."
+    rm -f "${SOCK_FILE}"
+    cd "${TRIM_APPDEST}/bin"
+    nohup python3 web.py "${SOCK_FILE}" >> "${TRIM_PKGVAR}/web.log" 2>&1 &
+    echo $! > "${PID_FILE}"
+    sleep 1
+    if status_process; then
+        log_msg "Web service started"
+        return 0
+    fi
+    log_msg "Web service failed to start"
+    return 1
+}
+
+stop_process() {
+    log_msg "Stopping web service ..."
+    if [ -r "${PID_FILE}" ]; then
+        pid=$(head -n 1 "${PID_FILE}" | tr -d '[:space:]')
+        if kill -0 "${pid}" 2>/dev/null; then
+            kill -TERM "${pid}" 2>/dev/null
+            sleep 2
+            kill -KILL "${pid}" 2>/dev/null
+        fi
+        rm -f "${PID_FILE}"
+    fi
+    rm -f "${SOCK_FILE}"
+    return 0
+}
+
+status_process() {
+    if [ -f "${PID_FILE}" ]; then
+        pid=$(head -n 1 "${PID_FILE}" | tr -d '[:space:]')
+        if kill -0 "${pid}" 2>/dev/null; then
+            return 0
+        fi
+        rm -f "${PID_FILE}"
+    fi
+    return 1
+}
+
+case $1 in
+start)
+    start_process
+    ;;
+stop)
+    stop_process
+    ;;
+status)
+    if status_process; then
+        exit 0
+    else
+        exit 3
+    fi
+    ;;
+*)
+    exit 1
+    ;;
+esac

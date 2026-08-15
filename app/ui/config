@@ -1,0 +1,17 @@
+{
+  ".url": {
+    "seek-license-tool.Application": {
+      "title": "Seek 许可证工具",
+      "icon": "images/icon_{0}.png",
+      "type": "iframe",
+      "protocol": "",
+      "gatewayPrefix": "/app/seek-license-tool",
+      "gatewaySocket": "app.sock",
+      "url": "/app/seek-license-tool",
+      "allUsers": false,
+      "control": {
+        "accessPerm": "readonly"
+      }
+    }
+  }
+}

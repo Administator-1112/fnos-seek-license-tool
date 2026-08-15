@@ -1,0 +1,7 @@
+{
+  "defaults": {
+    "run-as": "root"
+  },
+  "username": "seek-license-tool",
+  "groupname": "seek-license-tool"
+}

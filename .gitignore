@@ -1,0 +1,17 @@
+# 打包产物
+*.fpk
+
+# Python
+__pycache__/
+*.pyc
+
+# 运行时数据（备份文件等）
+var/backup/
+app/var/
+
+# 临时
+*.log
+app.sock
+
+# 系统文件
+.DS_Store

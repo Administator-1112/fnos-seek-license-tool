@@ -1,0 +1,15 @@
+appname               = seek-license-tool
+version               = 1.0.0
+display_name          = Seek 许可证工具
+desc                  = 素材库 Seek 许可证管理工具。提供一键破解（跳过云端校验、自定义授权码/等级/时间）、移除破解与官方许可证留存恢复功能。仅供学习交流，请于下载后24小时内删除。
+platform              = all
+source                = thirdparty
+maintainer            = Administator-1112
+maintainer_url        = https://github.com/Administator-1112
+distributor           = Administator-1112
+os_min_version        = 1.2.0
+desktop_uidir         = ui
+desktop_applaunchname = seek-license-tool.Application
+ctl_stop              = false
+checkport             = false
+disable_authorization_path = true
