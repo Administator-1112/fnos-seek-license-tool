@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 web.py - Seek 许可证工具 Web UI 服务
-通过统一网关提供 HTTP 服务（unix socket），依赖 NAS 登录态。
+通过 TCP 端口直连提供 HTTP 服务（默认 17202），不依赖统一网关。
 路由:
   GET  /            → 首页（状态概览 + 监控 + 免责声明）
   GET  /how-it-works → 破解原理页
@@ -29,7 +29,8 @@ import payload
 
 DISCLAIMER = "本工具仅供学习交流使用，请于下载后 24 小时内删除。使用本工具破解软件许可证可能违反软件许可协议及当地法律法规，由此产生的任何后果由使用者自行承担。请尊重软件开发者的劳动成果，支持正版。本工具不用于任何商业用途，不用于侵犯他人合法权益。"
 
-GATEWAY_SOCK = os.environ.get('TRIM_APPDEST', '/vol1/hack/seek-license-tool/app') + '/app.sock'
+WEB_PORT = int(os.environ.get('WEB_PORT', '17202'))
+BIND_HOST = os.environ.get('BIND_HOST', '0.0.0.0')
 
 CSS = """
 :root { --bg:#0f1115; --card:#1a1d24; --border:#2a2e37; --text:#e4e7ec; --dim:#8b93a1; --accent:#4f8cff; --green:#34d399; --red:#f87171; --amber:#fbbf24; }
@@ -288,7 +289,13 @@ def html_resp(html):
 
 
 def is_admin(headers):
-    return headers.get('x-trim-isadmin', '').lower() == 'true'
+    # 端口直连模式：统一网关不再注入 X-Trim-Isadmin。
+    # 放行本地/内网访问（WebUI 本身带免责声明，且依赖 root 权限操作）。
+    # 若上层网关仍注入该 header，则以其为准；否则默认放行。
+    v = headers.get('x-trim-isadmin', '')
+    if v == '':
+        return True
+    return v.lower() == 'true'
 
 
 def handle_request(data):
@@ -359,19 +366,15 @@ def handle_request(data):
     return json_resp({'error': 'not found'}, 404)
 
 
-def server_loop(sock_path):
-    """启动 unix socket 服务器（多线程处理，避免阻塞）"""
-    try:
-        os.unlink(sock_path)
-    except FileNotFoundError:
-        pass
-    server = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    server.bind(sock_path)
-    os.chmod(sock_path, 0o777)
+def server_loop(port):
+    """启动 TCP 端口服务器（多线程处理，避免阻塞）"""
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind((BIND_HOST, port))
     server.listen(16)
-    print(f"[web] 监听 {sock_path}", flush=True)
+    print(f"[web] 监听 {BIND_HOST}:{port}", flush=True)
     while True:
-        conn, _ = server.accept()
+        conn, addr = server.accept()
         threading.Thread(target=_handle_conn, args=(conn,), daemon=True).start()
 
 
@@ -386,7 +389,13 @@ def _handle_conn(conn):
                 break
             data += chunk
             if b'\r\n\r\n' in data:
-                break
+                head, _, rest = data.partition(b'\r\n\r\n')
+                clen = 0
+                for line in head.split(b'\r\n'):
+                    if line.lower().startswith(b'content-length:'):
+                        clen = int(line.split(b':', 1)[1].strip() or 0)
+                if len(rest) >= clen:
+                    break
         if data:
             resp = handle_request(data)
             conn.sendall(resp)
@@ -400,5 +409,5 @@ def _handle_conn(conn):
 
 
 if __name__ == '__main__':
-    sock = sys.argv[1] if len(sys.argv) > 1 else GATEWAY_SOCK
-    server_loop(sock)
+    port = int(sys.argv[1]) if len(sys.argv) > 1 else WEB_PORT
+    server_loop(port)
