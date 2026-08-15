@@ -2,7 +2,7 @@
 
 LOG_FILE="${TRIM_PKGVAR}/info.log"
 PID_FILE="${TRIM_PKGVAR}/app.pid"
-SOCK_FILE="${TRIM_APPDEST}/app.sock"
+WEB_PORT=17202
 
 log_msg() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" >> ${LOG_FILE}
@@ -13,10 +13,9 @@ start_process() {
         return 0
     fi
 
-    log_msg "Starting web service ..."
-    rm -f "${SOCK_FILE}"
+    log_msg "Starting web service on port ${WEB_PORT} ..."
     cd "${TRIM_APPDEST}/bin"
-    nohup python3 web.py "${SOCK_FILE}" >> "${TRIM_PKGVAR}/web.log" 2>&1 &
+    nohup python3 web.py "${WEB_PORT}" >> "${TRIM_PKGVAR}/web.log" 2>&1 &
     echo $! > "${PID_FILE}"
     sleep 1
     if status_process; then
@@ -38,7 +37,6 @@ stop_process() {
         fi
         rm -f "${PID_FILE}"
     fi
-    rm -f "${SOCK_FILE}"
     return 0
 }
 
