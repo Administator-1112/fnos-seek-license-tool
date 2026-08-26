@@ -129,16 +129,18 @@ def write_license(payload_hex, sign, license_code, name, tag,
             group_key='{group_key}',
             product_id={int(product_id)},
             sku_id={int(sku_id)},
-            salt='{salt}'
+            salt='{salt}',
+            updated_at=now()
             WHERE id={lic['id']};"""
     else:
         sql = f"""INSERT INTO license
             (license_code, name, type, product_id, sku_id, group_key, salt, sign, payload,
-             valid_from, valid_to, period, status, tag, expire_soon_notify)
+             valid_from, valid_to, period, status, tag, expire_soon_notify,
+             created_at, updated_at)
             VALUES ('{license_code}', '{name}', 'Soft', {int(product_id)}, {int(sku_id)},
                     '{group_key}', '{salt}', '{sign_sql}', '{payload_hex}',
                     {int(valid_from)}, {int(valid_to)}, {int(period)}, {int(status)},
-                    '{tag}', 0);"""
+                    '{tag}', 0, now(), now());"""
     _psql(sql)
     return True
 
