@@ -5,6 +5,7 @@ patcher.py - trim_license 二进制 patch 引擎
 从而跳过云端检查，使伪造 license 不被标记为无效。
 多版本自适应：pclntab 解析 + 字节模式兜底。
 """
+import bisect
 import hashlib
 import os
 import shutil
@@ -15,6 +16,12 @@ import pclntab
 
 TRIM_LICENSE_BIN = "/usr/trim/bin/trim_license"
 NOP = b"\x90\x90\x90\x90\x90"
+
+VERIFY_FUNCS = (
+    'app/core/pkg/trimlic.LicenseVerify',
+    'app/core/service.verifySignedLicense',
+    'app/core/service.hardwareBindingMatches',
+)
 
 
 class PatchError(Exception):
@@ -38,6 +45,31 @@ def backup_binary(bin_path, backup_path):
     return backup_path
 
 
+def is_verify_bypassed(bin_path):
+    """检查签名/硬件校验是否已被绕过"""
+    try:
+        funcs = pclntab.parse_pclntab(bin_path)
+        items = sorted(funcs.items(), key=lambda kv: kv[1])
+        addrs = [va for _, va in items]
+        data = open(bin_path, 'rb').read()
+        diff = 0x400000
+        for name in VERIFY_FUNCS:
+            va = funcs.get(name)
+            if va is None:
+                continue
+            i = bisect.bisect_right(addrs, va)
+            end = addrs[i] if i < len(addrs) else va + 0x20000
+            for off in range(va - diff, min(end - diff, len(data) - 11)):
+                if (data[off] == 0xB0 and data[off + 1] == 0x01
+                        and data[off + 2] == 0x48 and data[off + 3] == 0x81
+                        and data[off + 4] == 0xC4
+                        and data[off + 9] == 0x5D and data[off + 10] == 0xC3):
+                    return True
+    except Exception:
+        pass
+    return False
+
+
 def is_patched(bin_path):
     """检查是否已 patch（call 指令是否已是 NOP）"""
     try:
@@ -56,7 +88,7 @@ def is_patched(bin_path):
                 off = va - diff
                 if 0 <= off < len(data) - 5:
                     if data[off:off+5] == NOP:
-                        return True
+                        return is_verify_bypassed(bin_path)
             return False
         return False
     except Exception:
@@ -109,6 +141,43 @@ def patch_binary(bin_path, backup_path=None):
         if new_data[off:off+5] != NOP:
             raise PatchError(f"patch 验证失败 @ 0x{off:x}")
     return True, [hex(va) for va in calls], None
+
+
+def patch_verify_bypass(bin_path):
+    """
+    绕过 Ed25519 签名与硬件绑定校验。
+    在 LicenseVerify / verifySignedLicense / hardwareBindingMatches 内，
+    把「xor eax,eax + 函数尾声」的失败返回改写为「mov al,1 + 函数尾声」，
+    使验证恒为成功。伪造 sign 无法通过官方私钥验签，故必须绕过此层。
+    返回被改写的 VA 列表。
+    """
+    if not os.path.exists(bin_path):
+        raise PatchError(f"二进制不存在: {bin_path}")
+    funcs = pclntab.parse_pclntab(bin_path)
+    items = sorted(funcs.items(), key=lambda kv: kv[1])
+    addrs = [va for _, va in items]
+    data = bytearray(open(bin_path, 'rb').read())
+    diff = 0x400000
+    patched = []
+
+    for name in VERIFY_FUNCS:
+        va = funcs.get(name)
+        if va is None:
+            continue
+        i = bisect.bisect_right(addrs, va)
+        end = addrs[i] if i < len(addrs) else va + 0x20000
+        for off in range(va - diff, min(end - diff, len(data) - 11)):
+            if (data[off] == 0x31 and data[off + 1] == 0xC0
+                    and data[off + 2] == 0x48 and data[off + 3] == 0x81
+                    and data[off + 4] == 0xC4
+                    and data[off + 9] == 0x5D and data[off + 10] == 0xC3):
+                data[off] = 0xB0
+                data[off + 1] = 0x01
+                patched.append(off + diff)
+
+    if patched:
+        open(bin_path, 'wb').write(bytes(data))
+    return patched
 
 
 def _patch_by_pattern(bin_path, backup_path):
