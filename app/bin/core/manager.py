@@ -113,6 +113,11 @@ def apply_license(edition='enterprise_ultimate', license_code='L-ENTERPRISE',
             raise Exception(f"patch 失败: {err}")
         steps.append(f'  已 patch {len(calls)} 个调用点')
 
+        # 2.5 绕过签名 / 硬件绑定校验
+        steps.append('绕过 license 签名与硬件绑定校验...')
+        vpts = patcher.patch_verify_bypass(TRIM_BIN)
+        steps.append(f'  已改写 {len(vpts)} 个校验返回点')
+
         # 3. 构造 payload
         steps.append('构造 license payload（AES 加密）...')
         payload_hex, payload_json = payload.build_payload(
