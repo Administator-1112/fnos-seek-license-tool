@@ -30,9 +30,10 @@
 
 1. **留存官方许可证**：破解前备份当前官方许可证（数据库记录 + payload 明文）
 2. **patch trim_license 二进制**：定位 `softLicenseCheckInit` 中调用 `CheckLicense` 的指令并改写为 NOP，跳过云端检查
-3. **构造许可证 payload**：AES-256-CBC 加密构造自定义许可证数据
-4. **写入数据库**：更新 license 表（授权码、名称、等级、时间）
-5. **重启服务**：让变更生效
+3. **绕过签名/硬件绑定校验**：改写 `LicenseVerify`、`verifySignedLicense`、`hardwareBindingMatches` 的失败返回点，使验签恒为通过
+4. **构造许可证 payload**：AES-256-CBC 加密构造自定义许可证数据
+5. **写入数据库**：更新 license 表（授权码、名称、等级、时间）
+6. **重启服务**：让变更生效
 
 ### 移除破解（remove）
 
@@ -119,8 +120,8 @@ Seek (Go 应用)
 **破解三步**：
 
 1. **patch trim_license 二进制**：改写调用 `CheckLicense` 的指令为 NOP，云端检查不再执行，伪造许可证不被标记无效
-2. **构造许可证 payload**：用 AES-256-CBC 加密构造自定义许可证数据
-3. **写入数据库**：更新 license 表
+2. **绕过签名与硬件绑定校验**：改写 `LicenseVerify` / `verifySignedLicense` / `hardwareBindingMatches` 内所有失败返回点，使 Ed25519 验签与硬件绑定校验恒为通过（伪造 sign 无法用官方私钥签名，故必须绕过该层）
+3. **构造许可证 payload + 写入数据库**：AES-256-CBC 加密构造 license 数据并更新 license 表
 
 **多版本自适应**：通过解析 Go 二进制的 pclntab 符号表动态定位函数地址，自动适配任意版本；解析失败时回退字节模式匹配。
 
